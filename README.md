@@ -20,29 +20,49 @@
 
 ## 快速使用
 
+先让两台设备使用同一个房间号。第一台设备可以在网页中点击“创建房间”，也可以自行约定房间号，例如 `ABC123`。
+
+| 组合 | 可测试内容 |
+|---|---|
+| 浏览器 ↔ 浏览器 | 消息、摄像头、屏幕共享 |
+| 浏览器 ↔ CLI | 消息 |
+| CLI ↔ CLI | 消息 |
+
+### 浏览器 ↔ 浏览器
+
 1. 两台设备打开部署后的 HTTPS 页面。
-2. 第一台设备创建房间，并把房间号发给第二台设备。
-3. 第二台设备通过网页或 CLI 加入同一房间。
-4. 连接成功后发送消息；浏览器双方还可共享摄像头或屏幕。
+2. 设备 A 创建房间，设备 B 输入相同房间号加入。
+3. DataChannel 打开后可以发送消息。
+4. 任意一方可以共享摄像头或屏幕。
 
-CLI 示例：
+### 浏览器 ↔ CLI
 
-```bash
-./webrtc-test-linux-amd64 \
-  --server wss://your-server.example/ws \
-  --room ABC123
-```
-
-自签名证书环境需增加：
+浏览器创建房间后，另一台设备运行：
 
 ```bash
---insecure
+webrtc-test \
+  --server wss://服务器地址/ws \
+  --room ABC123 \
+  --insecure
 ```
+
+### CLI ↔ CLI
+
+两台设备分别运行相同命令，并使用同一个房间号：
+
+```bash
+webrtc-test --server wss://服务器地址/ws --room ABC123 --insecure
+```
+
+双方看到“数据通道已打开”后，直接输入文字并回车即可互发消息。
+
+`--insecure` 仅用于自签名证书环境。完整的平台下载、权限设置、日志说明和故障排查见[使用文档](docs/USAGE.zh-CN.md)。
 
 ## 文档
 
-- [部署文档](docs/DEPLOYMENT.zh-CN.md)
-- [使用文档](docs/USAGE.zh-CN.md)
+- [部署文档](docs/DEPLOYMENT.zh-CN.md)：通用部署步骤
+- [使用文档](docs/USAGE.zh-CN.md)：完整测试操作和故障排查
+- [当前部署记录](docs/CURRENT-DEPLOYMENT.zh-CN.md)：本私有仓库对应的腾讯云部署信息
 
 ## 目录
 
@@ -50,6 +70,7 @@ CLI 示例：
 cli/                  Go + Pion WebRTC 命令行客户端
 scripts/              CLI 跨平台构建脚本
 signaling/            HTTPS、静态页面和 WSS 信令服务
+docs/                 中文部署与使用文档
 docker-compose.yml    Docker 部署配置
 ```
 
