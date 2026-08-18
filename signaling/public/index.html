@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>WebRTC 端到端测试</title><link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <header><div><p class="eyebrow">WEBRTC DIAGNOSTICS</p><h1>端到端连接测试</h1><p>数据消息、摄像头与屏幕共享</p></div><span id="secureBadge" class="badge">安全连接</span></header>
+  <section class="card join"><input id="roomInput" maxlength="24" placeholder="输入房间号"><button id="createBtn">创建房间</button><button id="joinBtn" class="primary">加入房间</button></section>
+  <section class="status-grid">
+    <div class="card metric"><span>信令</span><strong id="signalStatus">未连接</strong></div>
+    <div class="card metric"><span>远端设备</span><strong id="peerStatus">等待加入</strong></div>
+    <div class="card metric"><span>WebRTC</span><strong id="rtcStatus">未建立</strong></div>
+    <div class="card metric"><span>连接路径</span><strong id="routeStatus">待检测</strong></div>
+  </section>
+  <section class="layout">
+    <div class="card panel">
+      <h2>媒体通道</h2><div class="videos"><div><label>本地</label><video id="localVideo" autoplay muted playsinline></video></div><div><label>远端</label><video id="remoteVideo" autoplay playsinline></video></div></div>
+      <div class="actions"><button id="cameraBtn">共享摄像头</button><button id="screenBtn">共享屏幕</button><button id="stopMediaBtn">停止共享</button></div>
+    </div>
+    <div class="card panel chat"><h2>数据通道</h2><div id="messages" class="messages"></div><div class="send"><input id="messageInput" placeholder="输入测试消息"><button id="sendBtn" class="primary">发送</button></div></div>
+  </section>
+  <section class="card panel"><div class="log-title"><h2>连接过程日志</h2><button id="clearLogBtn">清空</button></div><pre id="log"></pre></section>
+  <section class="card panel downloads"><h2>命令行客户端</h2><p>下载对应系统版本，使用房间号加入测试（自签名证书需添加 <code>--insecure</code>）。</p><div class="download-links"><a href="/download/webrtc-test-windows-amd64.exe">Windows</a><a href="/download/webrtc-test-linux-amd64">Linux x64</a><a href="/download/webrtc-test-linux-arm64">Linux ARM64</a><a href="/download/webrtc-test-macos-amd64">macOS Intel</a><a href="/download/webrtc-test-macos-arm64">macOS Apple 芯片</a><a href="/server.crt">下载证书</a></div><code id="cliCommand" class="command">webrtc-test --server wss://服务器地址/ws --room 房间号 --insecure</code></section>
+</main><script src="/app.js"></script>
+</body></html>

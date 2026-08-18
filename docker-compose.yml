@@ -1,0 +1,13 @@
+services:
+  webrtc-test:
+    build: ./signaling
+    container_name: webrtc-test
+    restart: unless-stopped
+    ports:
+      - "443:10443"
+    environment:
+      PORT: "10443"
+      TLS_CERT: /app/certs/server.crt
+      TLS_KEY: /app/certs/server.key
+    volumes:
+      - ./certs:/app/certs:ro

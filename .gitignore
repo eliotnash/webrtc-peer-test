@@ -1,0 +1,10 @@
+node_modules
+logs
+certs/
+*.key
+*.crt
+.env
+.env.*
+signaling/public/download/
+cli/webrtc-test-*
+.go-cache/
