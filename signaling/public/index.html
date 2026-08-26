@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>WebRTC Peer Test</title>
   <link rel="stylesheet" href="/style.css">
+  <style>
+    .candidate-table{width:100%;border-collapse:collapse;table-layout:fixed}
+    .candidate-table th,.candidate-table td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;overflow-wrap:anywhere}
+    .candidate-table th{color:var(--muted);font-size:12px}
+    .candidate-table td{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+    .candidate-columns{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .command-group{margin-top:16px}.command-group h3{margin:0 0 8px}.command+.command{margin-top:8px}
+    @media(max-width:800px){.candidate-columns{grid-template-columns:1fr}}
+  </style>
 </head>
 <body>
 <main>
@@ -25,12 +34,12 @@
   </section>
   <section class="card panel">
     <h2 data-i18n="candidatesTitle">ICE 候选地址</h2>
-    <div class="layout">
-      <div><h3 data-i18n="localCandidates">本地候选</h3><pre id="localCandidates">尚未发现</pre></div>
-      <div><h3 data-i18n="remoteCandidates">远端候选</h3><pre id="remoteCandidates">尚未发现</pre></div>
+    <div class="candidate-columns">
+      <div><h3 data-i18n="localCandidates">本地候选</h3><table class="candidate-table"><thead><tr><th data-i18n="candidateType">类型</th><th data-i18n="protocol">协议</th><th data-i18n="address">地址</th><th data-i18n="port">端口</th></tr></thead><tbody id="localCandidates"></tbody></table></div>
+      <div><h3 data-i18n="remoteCandidates">远端候选</h3><table class="candidate-table"><thead><tr><th data-i18n="candidateType">类型</th><th data-i18n="protocol">协议</th><th data-i18n="address">地址</th><th data-i18n="port">端口</th></tr></thead><tbody id="remoteCandidates"></tbody></table></div>
     </div>
     <h3 data-i18n="selectedCandidatePair">最终选择的候选对</h3>
-    <pre id="selectedPair">尚未选择</pre>
+    <table class="candidate-table"><thead><tr><th data-i18n="side">端</th><th data-i18n="candidateType">类型</th><th data-i18n="protocol">协议</th><th data-i18n="address">地址</th><th data-i18n="port">端口</th></tr></thead><tbody id="selectedPair"></tbody></table>
   </section>
   <section class="layout">
     <div class="card panel">
@@ -43,10 +52,10 @@
   <section class="card panel"><div class="log-title"><h2 data-i18n="connectionLog">连接过程日志</h2><button id="clearLogBtn" data-i18n="clear">清空</button></div><pre id="log"></pre></section>
   <section class="card panel downloads">
     <h2 data-i18n="cliTitle">命令行客户端</h2>
-    <p data-i18n="cliDescription">下载对应系统版本，使用房间号加入测试。自签名证书需要增加 --insecure。</p>
+    <p data-i18n="cliDescription">下载对应系统版本。推荐下载并指定服务器证书；临时测试也可跳过证书验证。</p>
     <div class="download-links"><a href="/download/webrtc-test-windows-amd64.exe">Windows</a><a href="/download/webrtc-test-linux-amd64">Linux x64</a><a href="/download/webrtc-test-linux-arm64">Linux ARM64</a><a href="/download/webrtc-test-macos-amd64">macOS Intel</a><a href="/download/webrtc-test-macos-arm64">macOS Apple Silicon</a><a href="/server.crt" data-i18n="downloadCert">下载证书</a></div>
-    <code id="cliCreateCommand" class="command"></code>
-    <code id="cliJoinCommand" class="command"></code>
+    <div class="command-group"><h3 data-i18n="verifiedCommands">验证服务器证书（推荐）</h3><p data-i18n="verifiedDescription">先下载 server.crt，再通过 --ca-cert 验证服务器身份。</p><code id="cliCreateCommand" class="command"></code><code id="cliJoinCommand" class="command"></code></div>
+    <div class="command-group"><h3 data-i18n="insecureCommands">跳过证书验证（仅测试）</h3><p data-i18n="insecureDescription">--insecure 会跳过 TLS 身份校验，存在中间人攻击风险。</p><code id="cliCreateInsecureCommand" class="command"></code><code id="cliJoinInsecureCommand" class="command"></code></div>
   </section>
 </main>
 <script src="/app.js"></script>

@@ -19,6 +19,10 @@ webrtc-test --server wss://example.com/ws --create-room --ca-cert server.crt
 
 # 进入已有房间
 webrtc-test --server wss://example.com/ws --join-room ABC123 --ca-cert server.crt
+
+# 临时测试：跳过证书验证
+webrtc-test --server wss://example.com/ws --create-room --insecure
+webrtc-test --server wss://example.com/ws --join-room ABC123 --insecure
 ```
 
 `--create-room` 与 `--join-room` 必须且只能选择一个。使用自签名证书时推荐 `--ca-cert`；临时测试也可用 `--insecure` 跳过证书校验，但两者不能同时使用。
@@ -46,6 +50,10 @@ webrtc-test --server wss://example.com/ws --create-room --ca-cert server.crt
 
 # Enter an existing room
 webrtc-test --server wss://example.com/ws --join-room ABC123 --ca-cert server.crt
+
+# Temporary testing: skip certificate verification
+webrtc-test --server wss://example.com/ws --create-room --insecure
+webrtc-test --server wss://example.com/ws --join-room ABC123 --insecure
 ```
 
 Exactly one of `--create-room` and `--join-room` is required. Prefer `--ca-cert` for a self-signed certificate. `--insecure` skips verification for temporary testing; the two options are mutually exclusive.

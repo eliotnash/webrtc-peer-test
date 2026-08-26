@@ -44,9 +44,10 @@ function leave(ws) {
   ws.peerId = undefined
 }
 
-function enterRoom(ws, roomId, peerId, clientType) {
+function enterRoom(ws, roomId, peerId, clientType, create = false) {
   leave(ws)
   if (!roomId) return send(ws, { type: 'error', code: 'ROOM_REQUIRED', message: 'Room ID is required' })
+  if (!create && !rooms.has(roomId)) return send(ws, { type: 'error', code: 'ROOM_NOT_FOUND', message: 'Room does not exist' })
   const room = rooms.get(roomId) || new Map()
   if (room.size >= 2 && !room.has(peerId)) return send(ws, { type: 'error', code: 'ROOM_FULL', message: 'Room already has two peers' })
   ws.roomId = roomId
@@ -65,7 +66,7 @@ wss.on('connection', ws => {
 
     const peerId = String(data.peerId || crypto.randomUUID()).slice(0, 64)
     const clientType = data.clientType === 'cli' ? 'cli' : 'browser'
-    if (data.type === 'create') return enterRoom(ws, createRoomId(), peerId, clientType)
+    if (data.type === 'create') return enterRoom(ws, createRoomId(), peerId, clientType, true)
     if (data.type === 'join') {
       const roomId = String(data.roomId || '').trim().toUpperCase().slice(0, 24)
       return enterRoom(ws, roomId, peerId, clientType)

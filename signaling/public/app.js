@@ -16,9 +16,13 @@ const text = {
     signaling:'信令', remoteDevice:'远端设备', route:'连接路径', mediaChannel:'媒体通道',
     local:'本地', remote:'远端', shareCamera:'共享摄像头', shareScreen:'共享屏幕', stopSharing:'停止共享',
     dataChannel:'数据通道', messagePlaceholder:'输入测试消息', send:'发送', connectionLog:'连接过程日志',
-    clear:'清空', cliTitle:'命令行客户端', cliDescription:'下载对应系统版本，通过创建或进入命令加入测试。自签名证书可使用 --ca-cert。',
+    clear:'清空', cliTitle:'命令行客户端', cliDescription:'下载对应系统版本。推荐下载并指定服务器证书；临时测试也可跳过证书验证。',
+    verifiedCommands:'验证服务器证书（推荐）', verifiedDescription:'先下载 server.crt，再通过 --ca-cert 验证服务器身份。',
+    insecureCommands:'跳过证书验证（仅测试）', insecureDescription:'--insecure 会跳过 TLS 身份校验，存在中间人攻击风险。',
     downloadCert:'下载证书', candidatesTitle:'ICE 候选地址', localCandidates:'本地候选', remoteCandidates:'远端候选',
     selectedCandidatePair:'最终选择的候选对', noCandidates:'尚未发现', noSelectedPair:'尚未选择',
+    candidateType:'类型', protocol:'协议', address:'地址', port:'端口', side:'端',
+    hostCandidate:'本地 (Host)', stunCandidate:'STUN (Srflx)', peerReflexive:'对端映射 (Prflx)', relayCandidate:'中继 (Relay)',
     disconnected:'未连接', connecting:'连接中', connected:'已连接', waiting:'等待加入', left:'已离开',
     notEstablished:'未建立', preparing:'准备连接', pending:'待检测', cli:'命令行客户端', browser:'浏览器客户端',
     direct:'P2P 直连', me:'我：', other:'对方：', enterRoom:'请输入要进入的房间号',
@@ -32,6 +36,7 @@ const text = {
     remoteMediaStopped:'远端已停止媒体共享', localCandidateLog:'本地 ICE 候选：{candidate}',
     remoteCandidateLog:'远端 ICE 候选：{candidate}', selectedPairLog:'最终候选对：本地 {local} ⇄ 远端 {remote}',
     loaded:'页面已加载，请创建或进入测试房间', error_ROOM_FULL:'房间已有两台设备', error_ROOM_REQUIRED:'房间号不能为空',
+    error_ROOM_NOT_FOUND:'房间不存在，请先创建房间',
     error_INVALID_MESSAGE:'消息格式无效', rtc_new:'新建', rtc_connecting:'连接中', rtc_connected:'已连接',
     rtc_disconnected:'已断开', rtc_failed:'失败', rtc_closed:'已关闭'
   },
@@ -41,10 +46,14 @@ const text = {
     signaling:'Signaling', remoteDevice:'Remote device', route:'Connection route', mediaChannel:'Media channel',
     local:'Local', remote:'Remote', shareCamera:'Share camera', shareScreen:'Share screen', stopSharing:'Stop sharing',
     dataChannel:'Data channel', messagePlaceholder:'Enter a test message', send:'Send', connectionLog:'Connection log',
-    clear:'Clear', cliTitle:'Command-line client', cliDescription:'Download a build and create or enter a room from the CLI. Use --ca-cert with a self-signed certificate.',
+    clear:'Clear', cliTitle:'Command-line client', cliDescription:'Download a build. Prefer the server certificate; skip verification only for temporary testing.',
+    verifiedCommands:'Verify the server certificate (recommended)', verifiedDescription:'Download server.crt first, then use --ca-cert to verify the server identity.',
+    insecureCommands:'Skip certificate verification (testing only)', insecureDescription:'--insecure disables TLS identity verification and permits man-in-the-middle attacks.',
     downloadCert:'Download certificate', candidatesTitle:'ICE candidate addresses', localCandidates:'Local candidates',
     remoteCandidates:'Remote candidates', selectedCandidatePair:'Selected candidate pair', noCandidates:'None discovered',
-    noSelectedPair:'Not selected', disconnected:'Disconnected', connecting:'Connecting', connected:'Connected',
+    noSelectedPair:'Not selected', candidateType:'Type', protocol:'Protocol', address:'Address', port:'Port', side:'Side',
+    hostCandidate:'Local (Host)', stunCandidate:'STUN (Srflx)', peerReflexive:'Peer reflexive (Prflx)', relayCandidate:'Relay',
+    disconnected:'Disconnected', connecting:'Connecting', connected:'Connected',
     waiting:'Waiting', left:'Left', notEstablished:'Not established', preparing:'Preparing', pending:'Pending',
     cli:'CLI client', browser:'Browser client', direct:'P2P direct', me:'Me: ', other:'Peer: ',
     enterRoom:'Enter the room ID to join', connectingLog:'Connecting to signaling server', signalConnected:'Signaling server connected',
@@ -59,6 +68,7 @@ const text = {
     localCandidateLog:'Local ICE candidate: {candidate}', remoteCandidateLog:'Remote ICE candidate: {candidate}',
     selectedPairLog:'Selected pair: local {local} ⇄ remote {remote}', loaded:'Page loaded; create or enter a test room',
     error_ROOM_FULL:'The room already has two devices', error_ROOM_REQUIRED:'A room ID is required',
+    error_ROOM_NOT_FOUND:'The room does not exist; create it first',
     error_INVALID_MESSAGE:'Invalid message format', rtc_new:'New', rtc_connecting:'Connecting', rtc_connected:'Connected',
     rtc_disconnected:'Disconnected', rtc_failed:'Failed', rtc_closed:'Closed'
   }
@@ -74,10 +84,26 @@ function renderLogs() {
 function log(key, vars={}) { logEntries.push({key,vars,time:new Date().toLocaleTimeString()});renderLogs() }
 function logRaw(raw) { logEntries.push({raw,time:new Date().toLocaleTimeString()});renderLogs() }
 function status(id,key) { const el=$(id);el.dataset.statusKey=key;el.textContent=t(key) }
+function candidateTypeLabel(type) {
+  return t({host:'hostCandidate',srflx:'stunCandidate',prflx:'peerReflexive',relay:'relayCandidate'}[type]||type||'pending')
+}
+function appendCandidateRow(body,candidate,side) {
+  const row=document.createElement('tr')
+  const values=side?[t(side),candidateTypeLabel(candidate.type),candidate.protocol,candidate.address,candidate.port]:[candidateTypeLabel(candidate.type),candidate.protocol,candidate.address,candidate.port]
+  values.forEach(value=>{const cell=document.createElement('td');cell.textContent=value;row.append(cell)})
+  body.append(row)
+}
+function renderCandidateList(id,list) {
+  const body=$(id);body.textContent=''
+  if(!list.length){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=4;cell.textContent=t('noCandidates');row.append(cell);body.append(row);return}
+  list.forEach(candidate=>appendCandidateRow(body,candidate))
+}
 function renderCandidates() {
-  $('localCandidates').textContent = localCandidates.length ? localCandidates.join('\n') : t('noCandidates')
-  $('remoteCandidates').textContent = remoteCandidates.length ? remoteCandidates.join('\n') : t('noCandidates')
-  $('selectedPair').textContent = selectedPair ? `${t('local')}: ${selectedPair.local}\n${t('remote')}: ${selectedPair.remote}` : t('noSelectedPair')
+  renderCandidateList('localCandidates',localCandidates)
+  renderCandidateList('remoteCandidates',remoteCandidates)
+  const body=$('selectedPair');body.textContent=''
+  if(!selectedPair){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=5;cell.textContent=t('noSelectedPair');row.append(cell);body.append(row);return}
+  appendCandidateRow(body,selectedPair.local,'local');appendCandidateRow(body,selectedPair.remote,'remote')
 }
 function applyLanguage() {
   document.documentElement.lang=lang==='zh'?'zh-CN':'en'
@@ -87,6 +113,8 @@ function applyLanguage() {
   $('languageBtn').textContent=lang==='zh'?'English':'中文'
   $('cliCreateCommand').textContent=`webrtc-test --server wss://${location.host}/ws --create-room --ca-cert server.crt`
   $('cliJoinCommand').textContent=`webrtc-test --server wss://${location.host}/ws --join-room ROOM_ID --ca-cert server.crt`
+  $('cliCreateInsecureCommand').textContent=`webrtc-test --server wss://${location.host}/ws --create-room --insecure`
+  $('cliJoinInsecureCommand').textContent=`webrtc-test --server wss://${location.host}/ws --join-room ROOM_ID --insecure`
   renderCandidates();renderLogs()
 }
 function signal(payload){if(ws?.readyState===1&&remotePeer)ws.send(JSON.stringify({type:'signal',target:remotePeer,payload}))}
@@ -122,14 +150,14 @@ function connect(mode,roomId=''){
   ws.onclose=()=>{status('signalStatus','disconnected');log('signalClosed')}
   ws.onerror=()=>log('signalError')
 }
-function candidateText(candidate){
-  if(!candidate)return 'unknown'
-  if(typeof candidate==='string')return candidate
-  return candidate.candidate||[candidate.type,candidate.address,candidate.port,candidate.protocol].filter(Boolean).join(' ')
+function parseCandidate(candidate){
+  const raw=typeof candidate==='string'?candidate:(candidate?.candidate||'')
+  const parts=raw.trim().split(/\s+/),typeIndex=parts.indexOf('typ')
+  return {raw,type:typeIndex>=0?parts[typeIndex+1]:(candidate?.type||'?'),protocol:(parts[2]||candidate?.protocol||'?').toUpperCase(),address:parts[4]||candidate?.address||'?',port:parts[5]||candidate?.port||'?'}
 }
 function addCandidate(list,candidate,key){
-  const value=candidateText(candidate)
-  if(!list.includes(value)){list.push(value);log(key,{candidate:value});renderCandidates()}
+  const value=parseCandidate(candidate)
+  if(!list.some(item=>item.raw===value.raw)){list.push(value);log(key,{candidate:value.raw});renderCandidates()}
 }
 function ensurePeer(){
   if(pc)return pc
@@ -185,9 +213,14 @@ function closePeer(){
   if(pc)pc.close();pc=null;channel=null;pendingRemoteCandidates=[];$('remoteVideo').srcObject=null
   status('rtcStatus','notEstablished');status('routeStatus','pending')
 }
-function statsCandidate(candidate){
-  if(!candidate)return 'unknown'
-  return `${candidate.candidateType||'?'} ${candidate.address||candidate.ip||'?'}:${candidate.port||'?'} ${candidate.protocol||'?'}`
+function statsCandidate(candidate,list){
+  if(!candidate)return {type:'?',protocol:'?',address:'?',port:'?'}
+  const protocol=String(candidate.protocol||'?').toUpperCase(),port=String(candidate.port||'?')
+  const match=list.find(item=>item.port===port&&item.protocol===protocol)||list.find(item=>item.port===port)
+  return {type:candidate.candidateType||match?.type||'?',protocol,address:candidate.address||candidate.ip||match?.address||'?',port}
+}
+function candidateSummary(candidate){
+  return `${candidateTypeLabel(candidate.type)} ${candidate.protocol} ${candidate.address}:${candidate.port}`
 }
 async function inspectRoute(){
   await new Promise(resolve=>setTimeout(resolve,500))
@@ -195,8 +228,8 @@ async function inspectRoute(){
   stats.forEach(report=>{if(report.type==='candidate-pair'&&report.state==='succeeded'&&report.nominated)pair=report})
   if(!pair)return
   const local=stats.get(pair.localCandidateId),remote=stats.get(pair.remoteCandidateId)
-  selectedPair={local:statsCandidate(local),remote:statsCandidate(remote)}
-  status('routeStatus','direct');log('selectedPairLog',selectedPair);renderCandidates()
+  selectedPair={local:statsCandidate(local,localCandidates),remote:statsCandidate(remote,remoteCandidates)}
+  status('routeStatus','direct');log('selectedPairLog',{local:candidateSummary(selectedPair.local),remote:candidateSummary(selectedPair.remote)});renderCandidates()
 }
 function addMessage(message,self=true){
   const el=document.createElement('div');el.className='message'+(self?' self':'')

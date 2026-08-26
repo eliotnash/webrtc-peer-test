@@ -265,7 +265,14 @@ func main() {
 			}
 			switch message.Type {
 			case "error":
-				logf("错误：%s", message.Message)
+				switch message.Code {
+				case "ROOM_NOT_FOUND":
+					logf("错误：房间不存在，请先创建房间")
+				case "ROOM_FULL":
+					logf("错误：房间已有两台设备")
+				default:
+					logf("错误：%s", message.Message)
+				}
 			case "peer-left":
 				remoteID = ""
 				logf("远端设备已离开")
