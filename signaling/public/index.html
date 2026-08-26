@@ -14,14 +14,23 @@
   </header>
   <section class="card join">
     <input id="roomInput" maxlength="24" data-i18n-placeholder="roomPlaceholder" placeholder="输入房间号（留空则自动生成）">
-    <button id="createBtn" data-i18n="createRoom">创建/进入房间</button>
-    <button id="joinBtn" class="primary" data-i18n="joinRoom">加入房间</button>
+    <button id="createBtn" data-i18n="createRoom">创建房间</button>
+    <button id="joinBtn" class="primary" data-i18n="joinRoom">进入房间</button>
   </section>
   <section class="status-grid">
     <div class="card metric"><span data-i18n="signaling">信令</span><strong id="signalStatus" data-status-key="disconnected">未连接</strong></div>
     <div class="card metric"><span data-i18n="remoteDevice">远端设备</span><strong id="peerStatus" data-status-key="waiting">等待加入</strong></div>
     <div class="card metric"><span>WebRTC</span><strong id="rtcStatus" data-status-key="notEstablished">未建立</strong></div>
     <div class="card metric"><span data-i18n="route">连接路径</span><strong id="routeStatus" data-status-key="pending">待检测</strong></div>
+  </section>
+  <section class="card panel">
+    <h2 data-i18n="candidatesTitle">ICE 候选地址</h2>
+    <div class="layout">
+      <div><h3 data-i18n="localCandidates">本地候选</h3><pre id="localCandidates">尚未发现</pre></div>
+      <div><h3 data-i18n="remoteCandidates">远端候选</h3><pre id="remoteCandidates">尚未发现</pre></div>
+    </div>
+    <h3 data-i18n="selectedCandidatePair">最终选择的候选对</h3>
+    <pre id="selectedPair">尚未选择</pre>
   </section>
   <section class="layout">
     <div class="card panel">
@@ -36,7 +45,8 @@
     <h2 data-i18n="cliTitle">命令行客户端</h2>
     <p data-i18n="cliDescription">下载对应系统版本，使用房间号加入测试。自签名证书需要增加 --insecure。</p>
     <div class="download-links"><a href="/download/webrtc-test-windows-amd64.exe">Windows</a><a href="/download/webrtc-test-linux-amd64">Linux x64</a><a href="/download/webrtc-test-linux-arm64">Linux ARM64</a><a href="/download/webrtc-test-macos-amd64">macOS Intel</a><a href="/download/webrtc-test-macos-arm64">macOS Apple Silicon</a><a href="/server.crt" data-i18n="downloadCert">下载证书</a></div>
-    <code id="cliCommand" class="command"></code>
+    <code id="cliCreateCommand" class="command"></code>
+    <code id="cliJoinCommand" class="command"></code>
   </section>
 </main>
 <script src="/app.js"></script>

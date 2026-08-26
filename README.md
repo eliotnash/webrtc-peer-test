@@ -11,16 +11,17 @@
 - 浏览器 ↔ 浏览器：DataChannel 消息、摄像头、屏幕共享
 - 浏览器 ↔ CLI、CLI ↔ CLI：DataChannel 消息
 - 两人测试房间与中英文网页切换
-- ICE、WebRTC 状态及 P2P/TURN 路径识别
+- 本地、STUN 映射及最终选中 ICE 候选地址
 - Windows、Linux、macOS CLI
 - Docker 开发与生产环境隔离
 
 ### 快速使用
 
-打开部署后的 HTTPS 页面。输入房间号后可创建/进入指定房间；留空则自动生成房间号。另一台设备使用相同房间号加入。
+打开部署后的 HTTPS 页面。点击“创建房间”由服务器生成唯一房间号；另一台设备输入该房间号并点击“进入房间”。
 
 ```bash
-webrtc-test --server wss://example.com/ws --room ABC123
+webrtc-test --server wss://example.com/ws --create-room --ca-cert server.crt
+webrtc-test --server wss://example.com/ws --join-room ABC123 --ca-cert server.crt
 ```
 
 自签名证书环境可增加 `--insecure`（仅建议测试使用）。
@@ -39,16 +40,17 @@ A self-hosted, cross-platform WebRTC peer-to-peer connectivity tester for browse
 - Browser ↔ browser: DataChannel messages, camera, and screen sharing
 - Browser ↔ CLI and CLI ↔ CLI: DataChannel messages
 - Two-peer rooms and a bilingual Chinese/English web UI
-- ICE/WebRTC status and P2P/TURN route detection
+- Local, STUN-mapped, and selected ICE candidate addresses
 - CLI builds for Windows, Linux, and macOS
 - Isolated Docker development and production environments
 
 ### Quick start
 
-Open the deployed HTTPS page. Enter a room ID to create or enter that room, or leave it blank to generate one automatically. Join from another device with the same room ID.
+Open the deployed HTTPS page. Click “Create Room” to receive a unique server-generated room ID. Enter that ID on another device and click “Enter Room”.
 
 ```bash
-webrtc-test --server wss://example.com/ws --room ABC123
+webrtc-test --server wss://example.com/ws --create-room --ca-cert server.crt
+webrtc-test --server wss://example.com/ws --join-room ABC123 --ca-cert server.crt
 ```
 
 Add `--insecure` only when testing with a self-signed certificate.

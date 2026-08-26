@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -22,6 +23,7 @@ import (
 
 type envelope struct {
 	Type       string          `json:"type"`
+	Code       string          `json:"code,omitempty"`
 	RoomID     string          `json:"roomId,omitempty"`
 	PeerID     string          `json:"peerId,omitempty"`
 	ClientType string          `json:"clientType,omitempty"`
@@ -32,103 +34,293 @@ type envelope struct {
 	Peers      []peerInfo      `json:"peers,omitempty"`
 	Payload    json.RawMessage `json:"payload,omitempty"`
 }
-type peerInfo struct { PeerID string `json:"peerId"`; ClientType string `json:"clientType"` }
-type signalPayload struct { Description *webrtc.SessionDescription `json:"description,omitempty"`; Candidate *webrtc.ICECandidateInit `json:"candidate,omitempty"` }
+
+type peerInfo struct {
+	PeerID     string `json:"peerId"`
+	ClientType string `json:"clientType"`
+}
+
+type signalPayload struct {
+	Description *webrtc.SessionDescription `json:"description,omitempty"`
+	Candidate   *webrtc.ICECandidateInit   `json:"candidate,omitempty"`
+}
 
 var (
-	conn *websocket.Conn
-	pc *webrtc.PeerConnection
-	dc *webrtc.DataChannel
-	selfID string
+	conn     *websocket.Conn
+	pc       *webrtc.PeerConnection
+	dc       *webrtc.DataChannel
+	selfID   string
 	remoteID string
-	writeMu sync.Mutex
-	pending []webrtc.ICECandidateInit
+	writeMu  sync.Mutex
+	pending  []webrtc.ICECandidateInit
 )
 
-func logf(format string, args ...any) { fmt.Printf("[%s] %s\n", time.Now().Format("15:04:05"), fmt.Sprintf(format,args...)) }
-func randomID() string { b:=make([]byte,8); _,_=rand.Read(b); return hex.EncodeToString(b) }
-func send(v any) error { writeMu.Lock(); defer writeMu.Unlock(); return conn.WriteJSON(v) }
-func sendSignal(payload signalPayload) { raw,_:=json.Marshal(payload); _=send(envelope{Type:"signal",Target:remoteID,Payload:raw}) }
+func logf(format string, args ...any) {
+	fmt.Printf("[%s] %s\n", time.Now().Format("15:04:05"), fmt.Sprintf(format, args...))
+}
+
+func randomID() string {
+	value := make([]byte, 8)
+	_, _ = rand.Read(value)
+	return hex.EncodeToString(value)
+}
+
+func send(value any) error {
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	return conn.WriteJSON(value)
+}
+
+func sendSignal(payload signalPayload) {
+	raw, _ := json.Marshal(payload)
+	_ = send(envelope{Type: "signal", Target: remoteID, Payload: raw})
+}
 
 func ensurePeer() error {
-	if pc != nil { return nil }
+	if pc != nil {
+		return nil
+	}
 	var err error
-	pc,err=webrtc.NewPeerConnection(webrtc.Configuration{ICEServers:[]webrtc.ICEServer{{URLs:[]string{"stun:stun.qq.com:3478","stun:stun.miwifi.com:3478"}}}})
-	if err!=nil{return err}
+	pc, err = webrtc.NewPeerConnection(webrtc.Configuration{ICEServers: []webrtc.ICEServer{{
+		URLs: []string{"stun:stun.qq.com:3478", "stun:stun.miwifi.com:3478"},
+	}}})
+	if err != nil {
+		return err
+	}
 	logf("已创建 WebRTC 连接")
-	pc.OnICECandidate(func(c *webrtc.ICECandidate){if c!=nil { init:=c.ToJSON(); sendSignal(signalPayload{Candidate:&init}); logf("发现本地 ICE 候选：%s",c.Typ.String()) }})
-	pc.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState){logf("ICE 状态：%s",s.String())})
-	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState){
-		logf("WebRTC 状态：%s",s.String())
-		if s==webrtc.PeerConnectionStateConnected { inspectRoute() }
+	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+		if candidate == nil {
+			return
+		}
+		init := candidate.ToJSON()
+		logf("本地 ICE 候选：%s", init.Candidate)
+		sendSignal(signalPayload{Candidate: &init})
 	})
-	pc.OnDataChannel(func(ch *webrtc.DataChannel){setupDataChannel(ch)})
+	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
+		logf("ICE 状态：%s", state.String())
+	})
+	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		logf("WebRTC 状态：%s", state.String())
+		if state == webrtc.PeerConnectionStateConnected {
+			inspectRoute()
+		}
+	})
+	pc.OnDataChannel(func(channel *webrtc.DataChannel) { setupDataChannel(channel) })
 	return nil
 }
 
-func setupDataChannel(ch *webrtc.DataChannel) {
-	dc=ch
-	dc.OnOpen(func(){logf("数据通道已打开；输入文字并回车即可发送")})
-	dc.OnClose(func(){logf("数据通道已关闭")})
-	dc.OnMessage(func(msg webrtc.DataChannelMessage){logf("收到消息：%s",string(msg.Data))})
+func setupDataChannel(channel *webrtc.DataChannel) {
+	dc = channel
+	dc.OnOpen(func() { logf("数据通道已打开；输入文字并回车即可发送") })
+	dc.OnClose(func() { logf("数据通道已关闭") })
+	dc.OnMessage(func(message webrtc.DataChannelMessage) { logf("收到消息：%s", string(message.Data)) })
 }
 
 func makeOffer() error {
-	if err:=ensurePeer();err!=nil{return err}
-	if dc==nil { ch,err:=pc.CreateDataChannel("messages",nil);if err!=nil{return err};setupDataChannel(ch) }
-	offer,err:=pc.CreateOffer(nil);if err!=nil{return err}
-	if err=pc.SetLocalDescription(offer);err!=nil{return err}
-	sendSignal(signalPayload{Description:pc.LocalDescription()});logf("已发送 SDP Offer");return nil
+	if err := ensurePeer(); err != nil {
+		return err
+	}
+	if dc == nil {
+		channel, err := pc.CreateDataChannel("messages", nil)
+		if err != nil {
+			return err
+		}
+		setupDataChannel(channel)
+	}
+	offer, err := pc.CreateOffer(nil)
+	if err != nil {
+		return err
+	}
+	if err = pc.SetLocalDescription(offer); err != nil {
+		return err
+	}
+	sendSignal(signalPayload{Description: pc.LocalDescription()})
+	return nil
 }
 
 func handleSignal(raw json.RawMessage) error {
-	if err:=ensurePeer();err!=nil{return err}
-	var p signalPayload;if err:=json.Unmarshal(raw,&p);err!=nil{return err}
-	if p.Description!=nil {
-		logf("收到 SDP %s",p.Description.Type.String())
-		if err:=pc.SetRemoteDescription(*p.Description);err!=nil{return err}
-		for _,c:=range pending {_=pc.AddICECandidate(c)};pending=nil
-		if p.Description.Type==webrtc.SDPTypeOffer { answer,err:=pc.CreateAnswer(nil);if err!=nil{return err};if err=pc.SetLocalDescription(answer);err!=nil{return err};sendSignal(signalPayload{Description:pc.LocalDescription()});logf("已发送 SDP Answer") }
+	if err := ensurePeer(); err != nil {
+		return err
 	}
-	if p.Candidate!=nil {
-		if pc.RemoteDescription()==nil {pending=append(pending,*p.Candidate)} else if err:=pc.AddICECandidate(*p.Candidate);err!=nil{return err}
-		logf("已加入远端 ICE 候选")
+	var payload signalPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return err
+	}
+	if payload.Description != nil {
+		if err := pc.SetRemoteDescription(*payload.Description); err != nil {
+			return err
+		}
+		for _, candidate := range pending {
+			_ = pc.AddICECandidate(candidate)
+		}
+		pending = nil
+		if payload.Description.Type == webrtc.SDPTypeOffer {
+			answer, err := pc.CreateAnswer(nil)
+			if err != nil {
+				return err
+			}
+			if err = pc.SetLocalDescription(answer); err != nil {
+				return err
+			}
+			sendSignal(signalPayload{Description: pc.LocalDescription()})
+		}
+	}
+	if payload.Candidate != nil {
+		logf("远端 ICE 候选：%s", payload.Candidate.Candidate)
+		if pc.RemoteDescription() == nil {
+			pending = append(pending, *payload.Candidate)
+		} else if err := pc.AddICECandidate(*payload.Candidate); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func inspectRoute(){
-	time.Sleep(500*time.Millisecond)
-	reports:=pc.GetStats()
-	for _,r:=range reports { if pair,ok:=r.(webrtc.ICECandidatePairStats);ok && pair.Nominated && pair.State==webrtc.StatsICECandidatePairStateSucceeded { local,_:=reports[pair.LocalCandidateID].(webrtc.ICECandidateStats);remote,_:=reports[pair.RemoteCandidateID].(webrtc.ICECandidateStats);route:="P2P 直连";if local.CandidateType==webrtc.ICECandidateTypeRelay||remote.CandidateType==webrtc.ICECandidateTypeRelay{route="TURN 中继"};logf("连接路径：%s，协议：%s",route,local.Protocol);return } }
+func candidateLabel(candidate webrtc.ICECandidateStats) string {
+	return fmt.Sprintf("%s %s:%d %s", candidate.CandidateType.String(), candidate.IP, candidate.Port, candidate.Protocol)
 }
 
-func main(){
-	server:=flag.String("server","","信令服务器地址，例如 wss://example.com/ws")
-	room:=flag.String("room","","房间号")
-	insecure:=flag.Bool("insecure",false,"允许自签名证书")
+func inspectRoute() {
+	time.Sleep(500 * time.Millisecond)
+	reports := pc.GetStats()
+	for _, report := range reports {
+		pair, ok := report.(webrtc.ICECandidatePairStats)
+		if !ok || !pair.Nominated || pair.State != webrtc.StatsICECandidatePairStateSucceeded {
+			continue
+		}
+		local, _ := reports[pair.LocalCandidateID].(webrtc.ICECandidateStats)
+		remote, _ := reports[pair.RemoteCandidateID].(webrtc.ICECandidateStats)
+		logf("最终候选对：本地 %s ⇄ 远端 %s", candidateLabel(local), candidateLabel(remote))
+		return
+	}
+}
+
+func tlsConfig(insecure bool, caFile string) (*tls.Config, error) {
+	config := &tls.Config{InsecureSkipVerify: insecure} // #nosec G402 -- explicitly requested by --insecure
+	if caFile == "" {
+		return config, nil
+	}
+	pemData, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("读取 CA 证书失败：%w", err)
+	}
+	roots, err := x509.SystemCertPool()
+	if err != nil || roots == nil {
+		roots = x509.NewCertPool()
+	}
+	if !roots.AppendCertsFromPEM(pemData) {
+		return nil, fmt.Errorf("CA 证书文件中没有有效的 PEM 证书")
+	}
+	config.RootCAs = roots
+	return config, nil
+}
+
+func main() {
+	server := flag.String("server", "", "信令服务器地址，例如 wss://example.com/ws")
+	createRoom := flag.Bool("create-room", false, "创建一个由服务器分配的唯一房间")
+	joinRoom := flag.String("join-room", "", "进入指定房间")
+	caCert := flag.String("ca-cert", "", "用于验证信令服务器的 CA/自签名证书文件")
+	insecure := flag.Bool("insecure", false, "跳过 TLS 证书校验（仅用于临时测试）")
 	flag.Parse()
-	if *server=="" {fmt.Fprintln(os.Stderr,"请使用 --server 指定信令服务器地址");os.Exit(2)}
-	if *room=="" {fmt.Fprintln(os.Stderr,"请使用 --room 指定房间号");os.Exit(2)}
-	selfID=randomID()
-	dialer:=websocket.Dialer{TLSClientConfig:&tls.Config{InsecureSkipVerify:*insecure}}
-	var err error;conn,_,err=dialer.Dial(*server,http.Header{});if err!=nil{logf("连接信令服务器失败：%v",err);os.Exit(1)};defer conn.Close()
+
+	if *server == "" {
+		fmt.Fprintln(os.Stderr, "请使用 --server 指定信令服务器地址")
+		os.Exit(2)
+	}
+	if (*createRoom && *joinRoom != "") || (!*createRoom && *joinRoom == "") {
+		fmt.Fprintln(os.Stderr, "--create-room 和 --join-room ROOM_ID 必须且只能选择一个")
+		os.Exit(2)
+	}
+	if *insecure && *caCert != "" {
+		fmt.Fprintln(os.Stderr, "--insecure 和 --ca-cert 不能同时使用")
+		os.Exit(2)
+	}
+	config, err := tlsConfig(*insecure, *caCert)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+
+	selfID = randomID()
+	dialer := websocket.Dialer{TLSClientConfig: config}
+	conn, _, err = dialer.Dial(*server, http.Header{})
+	if err != nil {
+		logf("连接信令服务器失败：%v", err)
+		os.Exit(1)
+	}
+	defer conn.Close()
 	logf("信令服务器连接成功")
-	_ = send(envelope{Type:"join",RoomID:strings.ToUpper(*room),PeerID:selfID,ClientType:"cli"})
-	go func(){
-		for {var msg envelope;if err:=conn.ReadJSON(&msg);err!=nil{logf("信令连接已断开：%v",err);return}
-			switch msg.Type {
-			case "error":logf("错误：%s",msg.Message)
-			case "peer-left":remoteID="";logf("远端设备已离开")
+	if *createRoom {
+		_ = send(envelope{Type: "create", PeerID: selfID, ClientType: "cli"})
+	} else {
+		_ = send(envelope{Type: "join", RoomID: strings.ToUpper(*joinRoom), PeerID: selfID, ClientType: "cli"})
+	}
+
+	go func() {
+		for {
+			var message envelope
+			if err := conn.ReadJSON(&message); err != nil {
+				logf("信令连接已断开：%v", err)
+				return
+			}
+			switch message.Type {
+			case "error":
+				logf("错误：%s", message.Message)
+			case "peer-left":
+				remoteID = ""
+				logf("远端设备已离开")
 			case "room-state":
-				var other *peerInfo;for i:=range msg.Peers{if msg.Peers[i].PeerID!=selfID{other=&msg.Peers[i];break}}
-				if other==nil{logf("已加入房间 %s，等待另一台设备",msg.RoomID);continue}
-				changed:=remoteID!=other.PeerID;remoteID=other.PeerID;logf("远端设备已加入：%s",other.ClientType)
-				if changed&&selfID<remoteID{if err:=makeOffer();err!=nil{logf("创建连接失败：%v",err)}}
-			case "signal":if err:=handleSignal(msg.Payload);err!=nil{logf("处理信令失败：%v",err)}
+				var other *peerInfo
+				for i := range message.Peers {
+					if message.Peers[i].PeerID != selfID {
+						other = &message.Peers[i]
+						break
+					}
+				}
+				if other == nil {
+					logf("当前房间：%s；等待另一台设备", message.RoomID)
+					continue
+				}
+				changed := remoteID != other.PeerID
+				remoteID = other.PeerID
+				logf("远端设备已进入：%s", other.ClientType)
+				if changed && selfID < remoteID {
+					if err := makeOffer(); err != nil {
+						logf("创建连接失败：%v", err)
+					}
+				}
+			case "signal":
+				if err := handleSignal(message.Payload); err != nil {
+					logf("处理信令失败：%v", err)
+				}
 			}
 		}
 	}()
-	go func(){scanner:=bufio.NewScanner(os.Stdin);for scanner.Scan(){text:=strings.TrimSpace(scanner.Text());if text==""{continue};if dc==nil||dc.ReadyState()!=webrtc.DataChannelStateOpen{logf("数据通道尚未打开");continue};if err:=dc.SendText(text);err!=nil{logf("发送失败：%v",err)}else{logf("发送消息：%s",text)}}}()
-	stop:=make(chan os.Signal,1);signal.Notify(stop,os.Interrupt,syscall.SIGTERM);<-stop;logf("正在退出");if pc!=nil{_ = pc.Close()}
+
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			message := strings.TrimSpace(scanner.Text())
+			if message == "" {
+				continue
+			}
+			if dc == nil || dc.ReadyState() != webrtc.DataChannelStateOpen {
+				logf("数据通道尚未打开")
+				continue
+			}
+			if err := dc.SendText(message); err != nil {
+				logf("发送失败：%v", err)
+			} else {
+				logf("发送消息：%s", message)
+			}
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+	logf("正在退出")
+	if pc != nil {
+		_ = pc.Close()
+	}
 }

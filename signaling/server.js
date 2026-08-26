@@ -8,6 +8,7 @@ const { WebSocketServer, WebSocket } = require('ws')
 const PORT = Number(process.env.PORT || 10443)
 const CERT_FILE = process.env.TLS_CERT || path.join(__dirname, 'certs', 'server.crt')
 const KEY_FILE = process.env.TLS_KEY || path.join(__dirname, 'certs', 'server.key')
+const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const app = express()
 app.use(express.static(path.join(__dirname, 'public')))
 app.get('/health', (_req, res) => res.json({ ok: true }))
@@ -22,7 +23,15 @@ function send(ws, message) {
 }
 
 function peers(room) {
-  return [...room.values()].map(p => ({ peerId: p.peerId, clientType: p.clientType }))
+  return [...room.values()].map(peer => ({ peerId: peer.peerId, clientType: peer.clientType }))
+}
+
+function createRoomId() {
+  do {
+    const bytes = crypto.randomBytes(6)
+    var roomId = [...bytes].map(byte => ROOM_ALPHABET[byte % ROOM_ALPHABET.length]).join('')
+  } while (rooms.has(roomId))
+  return roomId
 }
 
 function leave(ws) {
@@ -31,28 +40,36 @@ function leave(ws) {
   room.delete(ws.peerId)
   for (const peer of room.values()) send(peer.ws, { type: 'peer-left', peerId: ws.peerId })
   if (!room.size) rooms.delete(ws.roomId)
+  ws.roomId = undefined
+  ws.peerId = undefined
+}
+
+function enterRoom(ws, roomId, peerId, clientType) {
+  leave(ws)
+  if (!roomId) return send(ws, { type: 'error', code: 'ROOM_REQUIRED', message: 'Room ID is required' })
+  const room = rooms.get(roomId) || new Map()
+  if (room.size >= 2 && !room.has(peerId)) return send(ws, { type: 'error', code: 'ROOM_FULL', message: 'Room already has two peers' })
+  ws.roomId = roomId
+  ws.peerId = peerId
+  room.set(peerId, { ws, peerId, clientType })
+  rooms.set(roomId, room)
+  for (const peer of room.values()) send(peer.ws, { type: 'room-state', roomId, selfId: peer.peerId, peers: peers(room) })
 }
 
 wss.on('connection', ws => {
   ws.on('message', raw => {
     let data
-    try { data = JSON.parse(raw.toString()) } catch { return send(ws, { type: 'error', message: '消息格式无效' }) }
-
-    if (data.type === 'join') {
-      leave(ws)
-      const roomId = String(data.roomId || '').trim().toUpperCase().slice(0, 24)
-      const peerId = String(data.peerId || crypto.randomUUID()).slice(0, 64)
-      if (!roomId) return send(ws, { type: 'error', message: '房间号不能为空' })
-      const room = rooms.get(roomId) || new Map()
-      if (room.size >= 2 && !room.has(peerId)) return send(ws, { type: 'error', message: '房间已有两台设备' })
-      ws.roomId = roomId
-      ws.peerId = peerId
-      room.set(peerId, { ws, peerId, clientType: data.clientType === 'cli' ? 'cli' : 'browser' })
-      rooms.set(roomId, room)
-      for (const peer of room.values()) send(peer.ws, { type: 'room-state', roomId, selfId: peer.peerId, peers: peers(room) })
-      return
+    try { data = JSON.parse(raw.toString()) } catch {
+      return send(ws, { type: 'error', code: 'INVALID_MESSAGE', message: 'Invalid message format' })
     }
 
+    const peerId = String(data.peerId || crypto.randomUUID()).slice(0, 64)
+    const clientType = data.clientType === 'cli' ? 'cli' : 'browser'
+    if (data.type === 'create') return enterRoom(ws, createRoomId(), peerId, clientType)
+    if (data.type === 'join') {
+      const roomId = String(data.roomId || '').trim().toUpperCase().slice(0, 24)
+      return enterRoom(ws, roomId, peerId, clientType)
+    }
     if (data.type === 'signal' && ws.roomId) {
       const room = rooms.get(ws.roomId)
       const target = room && room.get(data.target)
