@@ -18,10 +18,10 @@
     <button id="joinBtn" class="primary" data-i18n="joinRoom">加入房间</button>
   </section>
   <section class="status-grid">
-    <div class="card metric"><span data-i18n="signaling">信令</span><strong id="signalStatus">未连接</strong></div>
-    <div class="card metric"><span data-i18n="remoteDevice">远端设备</span><strong id="peerStatus">等待加入</strong></div>
-    <div class="card metric"><span>WebRTC</span><strong id="rtcStatus">未建立</strong></div>
-    <div class="card metric"><span data-i18n="route">连接路径</span><strong id="routeStatus">待检测</strong></div>
+    <div class="card metric"><span data-i18n="signaling">信令</span><strong id="signalStatus" data-status-key="disconnected">未连接</strong></div>
+    <div class="card metric"><span data-i18n="remoteDevice">远端设备</span><strong id="peerStatus" data-status-key="waiting">等待加入</strong></div>
+    <div class="card metric"><span>WebRTC</span><strong id="rtcStatus" data-status-key="notEstablished">未建立</strong></div>
+    <div class="card metric"><span data-i18n="route">连接路径</span><strong id="routeStatus" data-status-key="pending">待检测</strong></div>
   </section>
   <section class="layout">
     <div class="card panel">

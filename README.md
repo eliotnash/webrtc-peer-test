@@ -27,8 +27,8 @@ webrtc-test --server wss://example.com/ws --room ABC123
 
 ### 文档
 
-- [部署指南 / Deployment](docs/DEPLOYMENT.md)
-- [使用指南 / Usage](docs/USAGE.md)
+- [部署指南](docs/DEPLOYMENT.md)
+- [使用指南](docs/USAGE.md)
 
 ## English
 
@@ -55,8 +55,8 @@ Add `--insecure` only when testing with a self-signed certificate.
 
 ### Documentation
 
-- [Deployment / 部署指南](docs/DEPLOYMENT.md)
-- [Usage / 使用指南](docs/USAGE.md)
+- [Deployment Guide](docs/DEPLOYMENT.md)
+- [Usage Guide](docs/USAGE.md)
 
 ## Project structure
 
