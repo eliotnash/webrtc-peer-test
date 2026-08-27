@@ -7,12 +7,13 @@ let localCandidates = []
 let remoteCandidates = []
 let selectedPair = null
 let logEntries = []
+let manualLeave = false
 let lang = localStorage.getItem('webrtc-language') || (navigator.language.startsWith('zh') ? 'zh' : 'en')
 
 const text = {
   zh: {
     title:'端到端连接测试', subtitle:'数据消息、摄像头与屏幕共享', secure:'安全连接',
-    roomPlaceholder:'创建时无需输入；进入时填写房间号', createRoom:'创建房间', joinRoom:'进入房间',
+    roomPlaceholder:'创建时无需输入；进入时填写房间号', createRoom:'创建房间', joinRoom:'进入房间', leaveRoom:'离开房间',
     signaling:'信令', remoteDevice:'远端设备', route:'连接路径', mediaChannel:'媒体通道',
     local:'本地', remote:'远端', shareCamera:'共享摄像头', shareScreen:'共享屏幕', stopSharing:'停止共享',
     dataChannel:'数据通道', messagePlaceholder:'输入测试消息', send:'发送', connectionLog:'连接过程日志',
@@ -35,14 +36,15 @@ const text = {
     cameraStarted:'摄像头共享已启动', screenStarted:'屏幕共享已启动', mediaFailed:'媒体共享失败：{error}',
     remoteMediaStopped:'远端已停止媒体共享', localCandidateLog:'本地 ICE 候选：{candidate}',
     remoteCandidateLog:'远端 ICE 候选：{candidate}', selectedPairLog:'最终候选对：本地 {local} ⇄ 远端 {remote}',
-    loaded:'页面已加载，请创建或进入测试房间', error_ROOM_FULL:'房间已有两台设备', error_ROOM_REQUIRED:'房间号不能为空',
+    loaded:'页面已加载，请创建或进入测试房间', leftRoom:'已离开房间', notInRoom:'当前未进入房间',
+    error_ROOM_FULL:'房间已有两台设备', error_ROOM_REQUIRED:'房间号不能为空',
     error_ROOM_NOT_FOUND:'房间不存在，请先创建房间',
     error_INVALID_MESSAGE:'消息格式无效', rtc_new:'新建', rtc_connecting:'连接中', rtc_connected:'已连接',
     rtc_disconnected:'已断开', rtc_failed:'失败', rtc_closed:'已关闭'
   },
   en: {
     title:'Peer-to-Peer Connection Test', subtitle:'Data messages, camera, and screen sharing', secure:'Secure connection',
-    roomPlaceholder:'No input to create; enter a room ID to join', createRoom:'Create Room', joinRoom:'Enter Room',
+    roomPlaceholder:'No input to create; enter a room ID to join', createRoom:'Create Room', joinRoom:'Enter Room', leaveRoom:'Leave Room',
     signaling:'Signaling', remoteDevice:'Remote device', route:'Connection route', mediaChannel:'Media channel',
     local:'Local', remote:'Remote', shareCamera:'Share camera', shareScreen:'Share screen', stopSharing:'Stop sharing',
     dataChannel:'Data channel', messagePlaceholder:'Enter a test message', send:'Send', connectionLog:'Connection log',
@@ -67,6 +69,7 @@ const text = {
     mediaFailed:'Media sharing failed: {error}', remoteMediaStopped:'Remote media sharing stopped',
     localCandidateLog:'Local ICE candidate: {candidate}', remoteCandidateLog:'Remote ICE candidate: {candidate}',
     selectedPairLog:'Selected pair: local {local} ⇄ remote {remote}', loaded:'Page loaded; create or enter a test room',
+    leftRoom:'Left the room', notInRoom:'Not currently in a room',
     error_ROOM_FULL:'The room already has two devices', error_ROOM_REQUIRED:'A room ID is required',
     error_ROOM_NOT_FOUND:'The room does not exist; create it first',
     error_INVALID_MESSAGE:'Invalid message format', rtc_new:'New', rtc_connecting:'Connecting', rtc_connected:'Connected',
@@ -123,6 +126,7 @@ function resetCandidates(){localCandidates=[];remoteCandidates=[];selectedPair=n
 function connect(mode,roomId=''){
   if(mode==='join'&&!roomId)return log('enterRoom')
   let roomAnnounced=false
+  manualLeave=false
   ws?.close();closePeer();resetCandidates()
   ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`)
   status('signalStatus','connecting');log('connectingLog')
@@ -147,7 +151,7 @@ function connect(mode,roomId=''){
     }
     if(data.type==='signal')await handleSignal(data.payload)
   }
-  ws.onclose=()=>{status('signalStatus','disconnected');log('signalClosed')}
+  ws.onclose=()=>{status('signalStatus','disconnected');log(manualLeave?'leftRoom':'signalClosed');manualLeave=false}
   ws.onerror=()=>log('signalError')
 }
 function parseCandidate(candidate){
@@ -213,6 +217,16 @@ function closePeer(){
   if(pc)pc.close();pc=null;channel=null;pendingRemoteCandidates=[];$('remoteVideo').srcObject=null
   status('rtcStatus','notEstablished');status('routeStatus','pending')
 }
+function leaveRoom(){
+  if(!ws||ws.readyState===WebSocket.CLOSED)return log('notInRoom')
+  manualLeave=true
+  stopMedia(false)
+  ws.close()
+  closePeer();remotePeer=null;remoteType=null
+  status('peerStatus','waiting');resetCandidates()
+  $('roomInput').value='';$('messages').textContent=''
+  history.replaceState(null,'',location.pathname)
+}
 function statsCandidate(candidate,list){
   if(!candidate)return {type:'?',protocol:'?',address:'?',port:'?'}
   const protocol=String(candidate.protocol||'?').toUpperCase(),port=String(candidate.port||'?')
@@ -239,6 +253,7 @@ function addMessage(message,self=true){
 $('languageBtn').onclick=()=>{lang=lang==='zh'?'en':'zh';localStorage.setItem('webrtc-language',lang);applyLanguage()}
 $('createBtn').onclick=()=>connect('create')
 $('joinBtn').onclick=()=>connect('join',$('roomInput').value.trim().toUpperCase())
+$('leaveBtn').onclick=leaveRoom
 $('cameraBtn').onclick=()=>share('camera');$('screenBtn').onclick=()=>share('screen');$('stopMediaBtn').onclick=()=>stopMedia(true)
 $('sendBtn').onclick=()=>{const message=$('messageInput').value.trim();if(!message)return;if(channel?.readyState!=='open')return log('dataNotOpen');channel.send(message);addMessage(message);log('sent',{text:message});$('messageInput').value=''}
 $('messageInput').onkeydown=event=>{if(event.key==='Enter')$('sendBtn').click()}
