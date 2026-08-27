@@ -36,6 +36,7 @@ const text = {
     cameraStarted:'摄像头共享已启动', screenStarted:'屏幕共享已启动', mediaFailed:'媒体共享失败：{error}',
     remoteMediaStopped:'远端已停止媒体共享', localCandidateLog:'本地 ICE 候选：{candidate}',
     remoteCandidateLog:'远端 ICE 候选：{candidate}', selectedPairLog:'最终候选对：本地 {local} ⇄ 远端 {remote}',
+    iceGatheringState:'ICE 候选收集状态：{state}', iceCandidateError:'STUN 探测失败：{url}，错误 {code}：{error}',
     loaded:'页面已加载，请创建或进入测试房间', leftRoom:'已离开房间', notInRoom:'当前未进入房间',
     error_ROOM_FULL:'房间已有两台设备', error_ROOM_REQUIRED:'房间号不能为空',
     error_ROOM_NOT_FOUND:'房间不存在，请先创建房间',
@@ -69,6 +70,7 @@ const text = {
     mediaFailed:'Media sharing failed: {error}', remoteMediaStopped:'Remote media sharing stopped',
     localCandidateLog:'Local ICE candidate: {candidate}', remoteCandidateLog:'Remote ICE candidate: {candidate}',
     selectedPairLog:'Selected pair: local {local} ⇄ remote {remote}', loaded:'Page loaded; create or enter a test room',
+    iceGatheringState:'ICE gathering state: {state}', iceCandidateError:'STUN discovery failed: {url}, error {code}: {error}',
     leftRoom:'Left the room', notInRoom:'Not currently in a room',
     error_ROOM_FULL:'The room already has two devices', error_ROOM_REQUIRED:'A room ID is required',
     error_ROOM_NOT_FOUND:'The room does not exist; create it first',
@@ -167,6 +169,8 @@ function ensurePeer(){
   if(pc)return pc
   pc=new RTCPeerConnection(rtcConfig);status('rtcStatus','preparing');log('peerCreated')
   pc.onicecandidate=event=>{if(event.candidate){addCandidate(localCandidates,event.candidate,'localCandidateLog');signal({candidate:event.candidate})}}
+  pc.onicegatheringstatechange=()=>log('iceGatheringState',{state:pc.iceGatheringState})
+  pc.onicecandidateerror=event=>log('iceCandidateError',{url:event.url||'unknown',code:String(event.errorCode||'?'),error:event.errorText||'unknown'})
   pc.onconnectionstatechange=()=>{status('rtcStatus','rtc_'+pc.connectionState);if(pc.connectionState==='connected')inspectRoute()}
   pc.ontrack=event=>{const stream=event.streams[0];$('remoteVideo').srcObject=stream;event.track.onmute=()=>{$('remoteVideo').srcObject=null};event.track.onunmute=()=>{$('remoteVideo').srcObject=stream};event.track.onended=()=>{$('remoteVideo').srcObject=null}}
   pc.ondatachannel=event=>setupChannel(event.channel)
