@@ -139,7 +139,11 @@ function connect(mode,roomId=''){
   ws.onmessage=async event=>{
     const data=JSON.parse(event.data)
     if(data.type==='error')return log(text[lang]['error_'+data.code]?'error_'+data.code:'signalError')
-    if(data.type==='peer-left'){remotePeer=null;status('peerStatus','left');log('remoteLeft');closePeer();return}
+    if(data.type==='peer-left'){
+      remotePeer=null;remoteType=null
+      closePeer();resetCandidates();status('peerStatus','waiting')
+      log('remoteLeft');return
+    }
     if(data.type==='room-state'){
       $('roomInput').value=data.roomId;history.replaceState(null,'',`?room=${data.roomId}`)
       if(!roomAnnounced){log(mode==='create'?'roomCreated':'joinedRoom',{room:data.roomId});roomAnnounced=true}
