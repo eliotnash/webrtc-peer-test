@@ -15,17 +15,6 @@
 - Windows、Linux、macOS CLI
 - Docker 开发与生产环境隔离
 
-### 快速使用
-
-打开部署后的 HTTPS 页面。点击“创建房间”由服务器生成唯一房间号；另一台设备输入该房间号并点击“进入房间”。
-
-```bash
-webrtc-test --server wss://example.com/ws --create-room --ca-cert server.crt
-webrtc-test --server wss://example.com/ws --join-room ABC123 --ca-cert server.crt
-```
-
-自签名证书环境可增加 `--insecure`（仅建议测试使用）。
-
 ### 文档
 
 - [部署指南](docs/DEPLOYMENT.md)
@@ -43,17 +32,6 @@ A self-hosted, cross-platform WebRTC peer-to-peer connectivity tester for browse
 - Local, STUN-mapped, and selected ICE candidate addresses
 - CLI builds for Windows, Linux, and macOS
 - Isolated Docker development and production environments
-
-### Quick start
-
-Open the deployed HTTPS page. Click “Create Room” to receive a unique server-generated room ID. Enter that ID on another device and click “Enter Room”.
-
-```bash
-webrtc-test --server wss://example.com/ws --create-room --ca-cert server.crt
-webrtc-test --server wss://example.com/ws --join-room ABC123 --ca-cert server.crt
-```
-
-Add `--insecure` only when testing with a self-signed certificate.
 
 ### Documentation
 
