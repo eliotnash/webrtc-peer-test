@@ -5,7 +5,7 @@ services:
     container_name: webrtc-test-prod
     restart: unless-stopped
     ports:
-      - "443:10443"
+      - "9443:10443"
     environment:
       PORT: "10443"
       TLS_CERT: /app/certs/server.crt
@@ -18,4 +18,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-

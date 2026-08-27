@@ -23,7 +23,7 @@ openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes \
 启动与检查：
 
 ```bash
-# 生产环境：443
+# 生产环境：9443
 docker compose -p webrtc-peer-prod -f compose.prod.yml up -d --build
 
 # 开发环境：8444，挂载宿主机源码
@@ -33,7 +33,7 @@ docker compose -p webrtc-peer-prod -f compose.prod.yml ps
 curl -k https://127.0.0.1/health
 ```
 
-生产环境至少开放 `443/TCP`；仅在需要公网开发访问时开放 `8444/TCP`。证书私钥不得提交到 Git。
+当前生产配置使用 `9443/TCP`；仅在需要公网开发访问时开放 `8444/TCP`。证书私钥不得提交到 Git。
 
 ## English
 
@@ -58,7 +58,7 @@ openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes \
 Start and verify:
 
 ```bash
-# Production on 443
+# Production on 9443
 docker compose -p webrtc-peer-prod -f compose.prod.yml up -d --build
 
 # Development on 8444 with source mounted from the host
@@ -68,5 +68,4 @@ docker compose -p webrtc-peer-prod -f compose.prod.yml ps
 curl -k https://127.0.0.1/health
 ```
 
-Open `443/TCP` for production. Open `8444/TCP` only when public development access is required. Never commit certificate private keys.
-
+The current production configuration uses `9443/TCP`. Open `8444/TCP` only when public development access is required. Never commit certificate private keys.
