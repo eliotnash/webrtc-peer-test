@@ -18,6 +18,10 @@ const server = https.createServer({ cert: fs.readFileSync(CERT_FILE), key: fs.re
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 1024 * 1024 })
 const rooms = new Map()
 
+function roomLog(event, details = {}) {
+  console.log(JSON.stringify({ time: new Date().toISOString(), event, ...details }))
+}
+
 function send(ws, message) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message))
 }
@@ -36,24 +40,40 @@ function createRoomId() {
 
 function leave(ws) {
   if (!ws.roomId || !rooms.has(ws.roomId)) return
+  const roomId = ws.roomId
+  const peerId = ws.peerId
   const room = rooms.get(ws.roomId)
   room.delete(ws.peerId)
   for (const peer of room.values()) send(peer.ws, { type: 'peer-left', peerId: ws.peerId })
-  if (!room.size) rooms.delete(ws.roomId)
+  roomLog('room-left', { roomId, peerId, peers: room.size })
+  if (!room.size) {
+    rooms.delete(roomId)
+    roomLog('room-released', { roomId, rooms: rooms.size })
+  }
   ws.roomId = undefined
   ws.peerId = undefined
 }
 
 function enterRoom(ws, roomId, peerId, clientType, create = false) {
   leave(ws)
-  if (!roomId) return send(ws, { type: 'error', code: 'ROOM_REQUIRED', message: 'Room ID is required' })
-  if (!create && !rooms.has(roomId)) return send(ws, { type: 'error', code: 'ROOM_NOT_FOUND', message: 'Room does not exist' })
+  if (!roomId) {
+    roomLog('room-rejected', { reason: 'ROOM_REQUIRED', peerId })
+    return send(ws, { type: 'error', code: 'ROOM_REQUIRED', message: 'Room ID is required' })
+  }
+  if (!create && !rooms.has(roomId)) {
+    roomLog('room-rejected', { roomId, reason: 'ROOM_NOT_FOUND', peerId })
+    return send(ws, { type: 'error', code: 'ROOM_NOT_FOUND', message: 'Room does not exist' })
+  }
   const room = rooms.get(roomId) || new Map()
-  if (room.size >= 2 && !room.has(peerId)) return send(ws, { type: 'error', code: 'ROOM_FULL', message: 'Room already has two peers' })
+  if (room.size >= 2 && !room.has(peerId)) {
+    roomLog('room-rejected', { roomId, reason: 'ROOM_FULL', peerId, peers: room.size })
+    return send(ws, { type: 'error', code: 'ROOM_FULL', message: 'Room already has two peers' })
+  }
   ws.roomId = roomId
   ws.peerId = peerId
   room.set(peerId, { ws, peerId, clientType })
   rooms.set(roomId, room)
+  roomLog(create ? 'room-created' : 'room-joined', { roomId, peerId, clientType, peers: room.size, rooms: rooms.size })
   for (const peer of room.values()) send(peer.ws, { type: 'room-state', roomId, selfId: peer.peerId, peers: peers(room) })
 }
 
