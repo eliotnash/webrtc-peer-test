@@ -8,6 +8,7 @@ let remoteCandidates = []
 let selectedPair = null
 let logEntries = []
 let manualLeave = false
+let roomState = { inRoom:false, roomId:'', peers:0, exists:null }
 let lang = localStorage.getItem('webrtc-language') || (navigator.language.startsWith('zh') ? 'zh' : 'en')
 
 const text = {
@@ -23,6 +24,8 @@ const text = {
     downloadCert:'下载证书', candidatesTitle:'ICE 候选地址', localCandidates:'本地候选', remoteCandidates:'远端候选',
     selectedCandidatePair:'最终选择的候选对', noCandidates:'尚未发现', noSelectedPair:'尚未选择',
     candidateType:'类型', protocol:'协议', address:'地址', port:'端口', side:'端',
+    membership:'房间状态', currentRoomId:'当前房间号', participantCount:'房间人数', roomExists:'房间是否存在',
+    inRoom:'已进入', outsideRoom:'未进入', yes:'是', no:'否', unknown:'未知',
     hostCandidate:'本地 (Host)', stunCandidate:'STUN (Srflx)', peerReflexive:'对端映射 (Prflx)', relayCandidate:'中继 (Relay)',
     disconnected:'未连接', connecting:'连接中', connected:'已连接', waiting:'等待加入', left:'已离开',
     notEstablished:'未建立', preparing:'准备连接', pending:'待检测', cli:'命令行客户端', browser:'浏览器客户端',
@@ -55,6 +58,8 @@ const text = {
     downloadCert:'Download certificate', candidatesTitle:'ICE candidate addresses', localCandidates:'Local candidates',
     remoteCandidates:'Remote candidates', selectedCandidatePair:'Selected candidate pair', noCandidates:'None discovered',
     noSelectedPair:'Not selected', candidateType:'Type', protocol:'Protocol', address:'Address', port:'Port', side:'Side',
+    membership:'Room status', currentRoomId:'Current room ID', participantCount:'Participants', roomExists:'Room exists',
+    inRoom:'In room', outsideRoom:'Not in room', yes:'Yes', no:'No', unknown:'Unknown',
     hostCandidate:'Local (Host)', stunCandidate:'STUN (Srflx)', peerReflexive:'Peer reflexive (Prflx)', relayCandidate:'Relay',
     disconnected:'Disconnected', connecting:'Connecting', connected:'Connected',
     waiting:'Waiting', left:'Left', notEstablished:'Not established', preparing:'Preparing', pending:'Pending',
@@ -110,6 +115,13 @@ function renderCandidates() {
   if(!selectedPair){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=5;cell.textContent=t('noSelectedPair');row.append(cell);body.append(row);return}
   appendCandidateRow(body,selectedPair.local,'local');appendCandidateRow(body,selectedPair.remote,'remote')
 }
+function renderRoomState() {
+  $('membershipStatus').textContent=t(roomState.inRoom?'inRoom':'outsideRoom')
+  $('currentRoomId').textContent=roomState.roomId||'—'
+  $('participantCount').textContent=String(roomState.peers)
+  $('roomExists').textContent=roomState.exists===null?t('unknown'):t(roomState.exists?'yes':'no')
+}
+function updateRoomState(changes) { roomState={...roomState,...changes};renderRoomState() }
 function applyLanguage() {
   document.documentElement.lang=lang==='zh'?'zh-CN':'en'
   document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=t(el.dataset.i18n)})
@@ -120,7 +132,7 @@ function applyLanguage() {
   $('cliJoinCommand').textContent=`webrtc-test --server wss://${location.host}/ws --join-room ROOM_ID --ca-cert server.crt`
   $('cliCreateInsecureCommand').textContent=`webrtc-test --server wss://${location.host}/ws --create-room --insecure`
   $('cliJoinInsecureCommand').textContent=`webrtc-test --server wss://${location.host}/ws --join-room ROOM_ID --insecure`
-  renderCandidates();renderLogs()
+  renderCandidates();renderRoomState();renderLogs()
 }
 function signal(payload){if(ws?.readyState===1&&remotePeer)ws.send(JSON.stringify({type:'signal',target:remotePeer,payload}))}
 function resetCandidates(){localCandidates=[];remoteCandidates=[];selectedPair=null;renderCandidates()}
@@ -138,14 +150,19 @@ function connect(mode,roomId=''){
   }
   ws.onmessage=async event=>{
     const data=JSON.parse(event.data)
-    if(data.type==='error')return log(text[lang]['error_'+data.code]?'error_'+data.code:'signalError')
+    if(data.type==='error'){
+      if(data.code==='ROOM_NOT_FOUND')updateRoomState({inRoom:false,roomId,peers:0,exists:false})
+      if(data.code==='ROOM_FULL')updateRoomState({inRoom:false,roomId,peers:2,exists:true})
+      return log(text[lang]['error_'+data.code]?'error_'+data.code:'signalError')
+    }
     if(data.type==='peer-left'){
       remotePeer=null;remoteType=null
-      closePeer();resetCandidates();status('peerStatus','waiting')
+      closePeer();resetCandidates();status('peerStatus','waiting');updateRoomState({inRoom:true,peers:1,exists:true})
       log('remoteLeft');return
     }
     if(data.type==='room-state'){
       $('roomInput').value=data.roomId;history.replaceState(null,'',`?room=${data.roomId}`)
+      updateRoomState({inRoom:true,roomId:data.roomId,peers:data.peers.length,exists:true})
       if(!roomAnnounced){log(mode==='create'?'roomCreated':'joinedRoom',{room:data.roomId});roomAnnounced=true}
       const other=data.peers.find(peer=>peer.peerId!==peerId)
       if(!other){status('peerStatus','waiting');log('joinedWaiting');return}
@@ -157,7 +174,7 @@ function connect(mode,roomId=''){
     }
     if(data.type==='signal')await handleSignal(data.payload)
   }
-  ws.onclose=()=>{status('signalStatus','disconnected');log(manualLeave?'leftRoom':'signalClosed');manualLeave=false}
+  ws.onclose=()=>{status('signalStatus','disconnected');updateRoomState({inRoom:false,peers:0,exists:null});log(manualLeave?'leftRoom':'signalClosed');manualLeave=false}
   ws.onerror=()=>log('signalError')
 }
 function parseCandidate(candidate){
@@ -232,6 +249,7 @@ function leaveRoom(){
   ws.close()
   closePeer();remotePeer=null;remoteType=null
   status('peerStatus','waiting');resetCandidates()
+  updateRoomState({inRoom:false,roomId:'',peers:0,exists:null})
   $('roomInput').value='';$('messages').textContent=''
   history.replaceState(null,'',location.pathname)
 }
