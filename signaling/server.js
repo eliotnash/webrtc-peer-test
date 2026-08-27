@@ -55,7 +55,6 @@ function leave(ws) {
 }
 
 function enterRoom(ws, roomId, peerId, clientType, create = false) {
-  leave(ws)
   if (!roomId) {
     roomLog('room-rejected', { reason: 'ROOM_REQUIRED', peerId })
     return send(ws, { type: 'error', code: 'ROOM_REQUIRED', message: 'Room ID is required' })
@@ -65,10 +64,14 @@ function enterRoom(ws, roomId, peerId, clientType, create = false) {
     return send(ws, { type: 'error', code: 'ROOM_NOT_FOUND', message: 'Room does not exist' })
   }
   const room = rooms.get(roomId) || new Map()
+  if (ws.roomId === roomId && room.has(ws.peerId)) {
+    return send(ws, { type: 'room-state', roomId, selfId: ws.peerId, peers: peers(room) })
+  }
   if (room.size >= 2 && !room.has(peerId)) {
     roomLog('room-rejected', { roomId, reason: 'ROOM_FULL', peerId, peers: room.size })
     return send(ws, { type: 'error', code: 'ROOM_FULL', message: 'Room already has two peers' })
   }
+  leave(ws)
   ws.roomId = roomId
   ws.peerId = peerId
   room.set(peerId, { ws, peerId, clientType })

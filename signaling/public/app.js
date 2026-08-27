@@ -9,6 +9,9 @@ let selectedPair = null
 let logEntries = []
 let manualLeave = false
 let roomState = { inRoom:false, roomId:'', peers:0, exists:null }
+let requestedMode = null
+let requestedRoomId = ''
+let roomAnnounced = false
 let lang = localStorage.getItem('webrtc-language') || (navigator.language.startsWith('zh') ? 'zh' : 'en')
 
 const text = {
@@ -41,6 +44,7 @@ const text = {
     remoteCandidateLog:'远端 ICE 候选：{candidate}', selectedPairLog:'最终候选对：本地 {local} ⇄ 远端 {remote}',
     iceGatheringState:'ICE 候选收集状态：{state}', iceCandidateError:'STUN 探测失败：{url}，错误 {code}：{error}',
     loaded:'页面已加载，请创建或进入测试房间', leftRoom:'已离开房间', notInRoom:'当前未进入房间',
+    alreadyInRoom:'当前已经在房间 {room} 中', requestInProgress:'正在处理上一个房间请求',
     error_ROOM_FULL:'房间已有两台设备', error_ROOM_REQUIRED:'房间号不能为空',
     error_ROOM_NOT_FOUND:'房间不存在，请先创建房间',
     error_INVALID_MESSAGE:'消息格式无效', rtc_new:'新建', rtc_connecting:'连接中', rtc_connected:'已连接',
@@ -77,6 +81,7 @@ const text = {
     selectedPairLog:'Selected pair: local {local} ⇄ remote {remote}', loaded:'Page loaded; create or enter a test room',
     iceGatheringState:'ICE gathering state: {state}', iceCandidateError:'STUN discovery failed: {url}, error {code}: {error}',
     leftRoom:'Left the room', notInRoom:'Not currently in a room',
+    alreadyInRoom:'Already in room {room}', requestInProgress:'A room request is already in progress',
     error_ROOM_FULL:'The room already has two devices', error_ROOM_REQUIRED:'A room ID is required',
     error_ROOM_NOT_FOUND:'The room does not exist; create it first',
     error_INVALID_MESSAGE:'Invalid message format', rtc_new:'New', rtc_connecting:'Connecting', rtc_connected:'Connected',
@@ -139,20 +144,27 @@ function resetCandidates(){localCandidates=[];remoteCandidates=[];selectedPair=n
 
 function connect(mode,roomId=''){
   if(mode==='join'&&!roomId)return log('enterRoom')
-  let roomAnnounced=false
+  if(mode==='join'&&roomState.inRoom&&roomState.roomId===roomId)return log('alreadyInRoom',{room:roomId})
+  if(ws?.readyState===WebSocket.CONNECTING)return log('requestInProgress')
+  requestedMode=mode;requestedRoomId=roomId;roomAnnounced=false
   manualLeave=false
-  ws?.close();closePeer();resetCandidates()
+  if(ws?.readyState===WebSocket.OPEN){
+    ws.send(JSON.stringify({type:mode,roomId,peerId,clientType:'browser'}))
+    return
+  }
+  closePeer();resetCandidates()
   ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`)
   status('signalStatus','connecting');log('connectingLog')
   ws.onopen=()=>{
     status('signalStatus','connected');log('signalConnected')
-    ws.send(JSON.stringify({type:mode,roomId,peerId,clientType:'browser'}))
+    ws.send(JSON.stringify({type:requestedMode,roomId:requestedRoomId,peerId,clientType:'browser'}))
   }
   ws.onmessage=async event=>{
     const data=JSON.parse(event.data)
     if(data.type==='error'){
-      if(data.code==='ROOM_NOT_FOUND')updateRoomState({inRoom:false,roomId,peers:0,exists:false})
-      if(data.code==='ROOM_FULL')updateRoomState({inRoom:false,roomId,peers:2,exists:true})
+      if(!roomState.inRoom&&data.code==='ROOM_NOT_FOUND')updateRoomState({inRoom:false,roomId:requestedRoomId,peers:0,exists:false})
+      if(!roomState.inRoom&&data.code==='ROOM_FULL')updateRoomState({inRoom:false,roomId:requestedRoomId,peers:2,exists:true})
+      roomAnnounced=true
       return log(text[lang]['error_'+data.code]?'error_'+data.code:'signalError')
     }
     if(data.type==='peer-left'){
@@ -161,9 +173,11 @@ function connect(mode,roomId=''){
       log('remoteLeft');return
     }
     if(data.type==='room-state'){
+      const switched=roomState.inRoom&&roomState.roomId!==data.roomId
+      if(switched){remotePeer=null;remoteType=null;closePeer();resetCandidates();$('messages').textContent=''}
       $('roomInput').value=data.roomId;history.replaceState(null,'',`?room=${data.roomId}`)
       updateRoomState({inRoom:true,roomId:data.roomId,peers:data.peers.length,exists:true})
-      if(!roomAnnounced){log(mode==='create'?'roomCreated':'joinedRoom',{room:data.roomId});roomAnnounced=true}
+      if(!roomAnnounced){log(requestedMode==='create'?'roomCreated':'joinedRoom',{room:data.roomId});roomAnnounced=true}
       const other=data.peers.find(peer=>peer.peerId!==peerId)
       if(!other){status('peerStatus','waiting');log('joinedWaiting');return}
       const changed=remotePeer!==other.peerId;remotePeer=other.peerId;remoteType=other.clientType
